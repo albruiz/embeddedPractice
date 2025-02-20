@@ -1,5 +1,16 @@
-<!-- ABOUT THE PROJECT -->
-## About The Project
+# Flower smart pot with Wi-Fi connection
+
+Minimal specifications: 
+1. The system shall control the status of the plant at all times (i.e., humidity level, light, temperature).
+2. When the plant needs attention, the pot will send a message to the smartphone.
+3. The user shall be able to set up a threshold for each of the parameters, so as to ask for attention.
+4. When the humidity is below the threshold, the plant will be watered automatically. Use a LED so as to turn on or off this functionality.
+5. If the light is over the threshold, the shutters of the room will be closed as much as indicated by the excess of light.
+6. The sensing frequency of each of the magnitudes shall be edited by the user through the smartphone (30 seconds, 1 minute, 5 minutes or 30 minutes).
+7. At any time, the user can ask for a new measurement of the parameters through the smartphone.
+8. The smartphone will show the values of the last measurement available.
+
+## Implementation
 State variables:
 - Humidity Level
 - Light
