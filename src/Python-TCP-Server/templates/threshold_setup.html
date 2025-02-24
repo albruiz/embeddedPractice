@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Threshold Setup</title>
+</head>
+<body>
+    <h1>Set Up Thresholds</h1>
+    <form method="post">
+        <label for="humidity">Humidity:</label>
+        <input type="number" step="0.1" id="humidity" name="humidity" value="{{ humidity_threshold }}"> %<br><br>
+
+        <label for="temperature">Temperature:</label>
+        <input type="number" step="0.1" id="temperature" name="temperature" value="{{ temperature_threshold }}"> °C<br><br>
+
+        <label for="light">Light:</label>
+        <input type="number" step="0.1" id="light" name="light" value="{{ light_threshold }}"> lux<br><br>
+
+        <button type="submit" name="save_thresholds">Save</button>
+        <button type="submit" name="cancel_thresholds">Cancel</button>
+    </form>
+</body>
+</html>

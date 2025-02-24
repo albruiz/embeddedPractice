@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "wifi.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -31,6 +32,9 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define DEFAULT_TEMP  20.0f
+#define DEFAULT_HUM   40.0f
+#define DEFAULT_LIGHT 100.0f
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -77,6 +81,28 @@ uint8_t pu8TxData [500];
 uint8_t pu8RxData [500];
 int iSendDataLength;
 int iReceivedDataLength;
+// Define the structure
+typedef struct {
+    uint8_t type;  // 0 to 2 (3 possible values) 0=UpdateNow, 1=SetUpTimer, 2=SetUpThresholds
+    uint8_t time;  // 0 to 3 (4 possible values) (def)0=30s, 1=1min, 2=5min, 3=30min
+    float temp;    // Temperature (def 20.0)
+    float hum;     // Humidity (def 40.0)
+    float light;   // Light level (def 100.0)
+} messageReceived;
+
+#pragma pack(push, 1)
+typedef struct {
+	uint8_t type;  // 0 to 1 (2 possible values) 0=normalUpdateMessage, 1=warning, 2=shuttersBeingClosed
+	float temp;    // Temperature (can be negative) (def 20.0)
+	float hum;     // Humidity (def 40.0)
+	float light;   // Light level (def 100.0)
+	} mesageSent;
+#pragma pack(pop)
+
+messageReceived parseMessage(const char *rxData);
+void sendingFunction();
+WIFI_Status_t sendMessage(const mesageSent* message);
+uint8_t* packMessage(const mesageSent* message, uint32_t* packedSize);
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -111,14 +137,23 @@ static void MX_RNG_Init(void);
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-	char pcRouterSSID[] = "2-1-M11";
-	char pcRouterPWR[] = "Mercader19012768";
+	char pcRouterSSID[] = "MOVISTAR_D0F0";
+	char pcRouterPWR[] = "faGAEandMxjdVvMwAqJa";
 	WIFI_Ecn_t	enRoutreEncryptiontype = WIFI_ECN_WPA2_PSK; // set your Router encryption
 	// change to your IP router
 	pu8RemoteIpv4[0] = 192;
 	pu8RemoteIpv4[1] = 168;
-	pu8RemoteIpv4[2] = 31;
-	pu8RemoteIpv4[3] = 12;
+	pu8RemoteIpv4[2] = 1;
+	pu8RemoteIpv4[3] = 35;
+
+	float temperature = 20.0f;
+	float humidity = 50.0f;
+	float light = 100.0f;
+	char message[100];
+
+
+
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -220,14 +255,14 @@ int main(void)
 		  {
 			  // send msg to server
 			  printf("successfully TCP client created\n\r");
-			  if(WIFI_SendData(0,"Hello from STM", 14, NULL, 1000) == WIFI_STATUS_OK)
-			  {
-				  printf("successfully sent welcome message to TCP server\n\r");
-			  }
-			  else
-			  {
-				  printf(">> failed to send welcome msg to TCP server\n\r");
-			  }
+			  //if(WIFI_SendData(0,"Hello from STM", 14, NULL, 1000) == WIFI_STATUS_OK)
+			  //{
+			  //	printf("successfully sent welcome message to TCP server\n\r");
+			  //}
+			  //else
+			  //{
+			  //	printf(">> failed to send welcome msg to TCP server\n\r");
+			  //}
 		  }
 		  else
 		  {
@@ -253,13 +288,36 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
+
+	  sprintf(message, "Temperature: %.2f, Humidity: %.2f, Light: %.2f", temperature, humidity, light);
+
+	  if(WIFI_SendData(0, message, strlen(message), NULL, 1000) == WIFI_STATUS_OK)
+	  {
+		  printf("Sent: %s\n\r", message);
+	  }
+	  else
+	  {
+		  printf(">> Failed to send data\n\r");
+	  }
+
+	  sendingFunction();
+
+
+	  HAL_Delay(2000);
+
 	  if(WIFI_ReceiveData(0, pu8RxData, sizeof(pu8RxData), &iReceivedDataLength, 5000) == WIFI_STATUS_OK)
 	  {
 		  if(iReceivedDataLength>0)
 		  {
 			  //with'/0' set the new message end, in case the new message length is lower than the old message
 			  pu8RxData[iReceivedDataLength] = '\0';
+
 			  printf("received message from server = %s\n\r", pu8RxData);
+
+			  messageReceived myMessage = parseMessage((const char *)pu8RxData); // Cast to const char *
+
+			  // Now you can use the values in myMessage:
+			  printf("Parsed: Type = %u, Time = %u, Temp = %.2f, Hum = %.2f, Light = %.2f\n",myMessage.type, myMessage.time, myMessage.temp, myMessage.hum, myMessage.light);
 		  }
 	  }
     /* USER CODE BEGIN 3 */
@@ -1015,6 +1073,169 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+// Function to parse the string and initialize the struct
+messageReceived parseMessage(const char *rxData) {
+    messageReceived message;
+    char *token;
+    char *str_copy; // Create a copy of the string, strtok modifies it
+
+    // Initialize to safe default values in case parsing fails
+    message.type = 0;
+    message.time = 0;
+    message.temp = DEFAULT_TEMP;
+    message.hum = DEFAULT_HUM;
+    message.light = DEFAULT_LIGHT;
+
+    // Create a copy of the input string since strtok modifies the string
+    str_copy = strdup(rxData);  // IMPORTANT:  Allocate memory for the copy
+
+    if (str_copy == NULL) {
+        printf("Error: Memory allocation failed for string copy.\n");
+        return message; // Return default initialized struct
+    }
+
+    // Parse the type
+    token = strtok(str_copy, ","); // Tokenize by comma
+    if (token != NULL) {
+        message.type = (uint8_t)atoi(token); // Convert string to integer
+        if (message.type > 2) {
+            printf("Error: Invalid type value: %d\n", message.type);
+            message.type = 0; // Reset to default
+        }
+    } else {
+        printf("Error: Missing type value\n");
+        goto cleanup; // Jump to cleanup to free memory
+    }
+
+    // Handle different types
+    if (message.type == 0) {
+        // Use default values for all other fields (already initialized)
+        printf("Type 0: Using default values.\n");
+    } else if (message.type == 1) {
+        // Parse the time
+        token = strtok(NULL, ","); // Get the next token
+        if (token != NULL) {
+            message.time = (uint8_t)atoi(token);
+            if (message.time > 3) {
+                printf("Error: Invalid time value: %d\n", message.time);
+                message.time = 0;  //Reset to Default
+            }
+        } else {
+            printf("Error: Missing time value for type 1\n");
+        }
+
+        // Use default values for temp, hum, light (already initialized)
+        printf("Type 1: Using default values for temp, hum, light.\n");
+    } else if (message.type == 2) {
+        // Parse temp, hum, and light
+        token = strtok(NULL, ","); // Get temp
+        if (token != NULL) {
+            message.temp = (float)atof(token);
+        } else {
+            printf("Error: Missing temp value for type 2\n");
+        }
+
+        token = strtok(NULL, ","); // Get hum
+        if (token != NULL) {
+            message.hum = (float)atof(token);
+        } else {
+            printf("Error: Missing hum value for type 2\n");
+        }
+
+        token = strtok(NULL, ","); // Get light
+        if (token != NULL) {
+            message.light = (float)atof(token);
+        } else {
+            printf("Error: Missing light value for type 2\n");
+        }
+
+        printf("Type 2: Using parsed values.\n");
+    }
+
+cleanup:
+    free(str_copy); // Free the allocated memory
+    return message;
+}
+
+
+void sendingFunction() {
+    mesageSent myMessage;
+    myMessage.type = 0; // Or 1 or 2
+    myMessage.temp = 22.5f;
+    myMessage.hum = 55.0f;
+    myMessage.light = 150.0f;
+
+    WIFI_Status_t sendStatus = sendMessage(&myMessage);
+
+    if (sendStatus == WIFI_STATUS_OK) {
+        printf("Message sent successfully!\n");
+    } else {
+        printf("Error sending message!\n");
+    }
+}
+
+uint8_t* packMessage(const mesageSent* message, uint32_t* packedSize) {
+    // Calculate the size of the packed data
+    uint32_t size = sizeof(message->type) +
+                   sizeof(message->temp) +
+                   sizeof(message->hum) +
+                   sizeof(message->light);
+
+    // Allocate memory for the packed data
+    uint8_t* packedData = (uint8_t*)malloc(size);
+
+    if (packedData == NULL) {
+        printf("Error: Memory allocation failed for packed data.\n");
+        *packedSize = 0;
+        return NULL;
+    }
+
+    // Pack the data into the byte array
+    uint8_t* ptr = packedData;
+
+    memcpy(ptr, &message->type, sizeof(message->type));
+    ptr += sizeof(message->type);
+
+    memcpy(ptr, &message->temp, sizeof(message->temp));
+    ptr += sizeof(message->temp);
+
+    memcpy(ptr, &message->hum, sizeof(message->hum));
+    ptr += sizeof(message->hum);
+
+    memcpy(ptr, &message->light, sizeof(message->light));
+    ptr += sizeof(message->light);
+
+    *packedSize = size;
+	printf("Packed Data (Hex):\n");
+	for (uint32_t i = 0; i < size; i++) {
+		printf("%02X ", packedData[i]); // %02X formats the byte as a two-digit hexadecimal number with leading zero if needed.
+	}
+
+    return packedData;
+}
+
+// Function to send the packed message
+WIFI_Status_t sendMessage(const mesageSent* message) {
+    uint32_t packedSize;
+    uint8_t* packedData = packMessage(message, &packedSize);
+    if (packedData == NULL) {
+        printf("Error: packedData es NULL\n");
+        return 1;
+    }
+
+    if (packedData == NULL || packedSize == 0) {
+        // Handle memory allocation failure
+        return WIFI_STATUS_ERROR;
+    }
+
+    // Assuming WIFI_SendData takes a byte array and its length
+    WIFI_Status_t status = WIFI_SendData(0, packedData, packedSize, NULL, 5000);
+
+    // Free the allocated memory
+    free(packedData);
+
+    return status;
+}
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
