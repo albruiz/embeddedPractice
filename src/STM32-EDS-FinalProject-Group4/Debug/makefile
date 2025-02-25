@@ -86,8 +86,8 @@ all: main-build
 main-build: STM32-EDS-FinalProject-Group4.elf secondary-outputs
 
 # Tool invocations
-STM32-EDS-FinalProject-Group4.elf STM32-EDS-FinalProject-Group4.map: $(OBJS) $(USER_OBJS) C:\ST\workspace\embeddedPractice\src\STM32-EDS-FinalProject-Group4\STM32L4S5VITX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "STM32-EDS-FinalProject-Group4.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\ST\workspace\embeddedPractice\src\STM32-EDS-FinalProject-Group4\STM32L4S5VITX_FLASH.ld" --specs=nosys.specs -Wl,-Map="STM32-EDS-FinalProject-Group4.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+STM32-EDS-FinalProject-Group4.elf STM32-EDS-FinalProject-Group4.map: $(OBJS) $(USER_OBJS) D:\DESKTOP\ D\UC3M-MASTER\EMBEDDED\ SYSTEM\WS2\embeddedPractice\src\STM32-EDS-FinalProject-Group4\STM32L4S5VITX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "STM32-EDS-FinalProject-Group4.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"D:\DESKTOP D\UC3M-MASTER\EMBEDDED SYSTEM\WS2\embeddedPractice\src\STM32-EDS-FinalProject-Group4\STM32L4S5VITX_FLASH.ld" --specs=nosys.specs -Wl,-Map="STM32-EDS-FinalProject-Group4.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

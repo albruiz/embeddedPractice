@@ -4,6 +4,7 @@ import threading
 import struct  # Import the struct module
 import socket as socketlib
 import sys # For checking byte order
+import re
 
 app = Flask(__name__)
 
@@ -43,31 +44,38 @@ def tcp_server():
     while True:
         try:
             # Expecting: uint8_t, float, float, float  (1 + 4 + 4 + 4 = 13 bytes)
-            data = conn.recv(13)  # Adjust buffer size to match the struct size
+            data = conn.recv(100)  # Adjust buffer size to match the struct size
 
             if not data:
                 print("Client disconnected.")
                 break
 
-            try:
+            else:
                 # Unpack the received data, assuming network byte order
+                """ print(data,'-------------')
                 unpacked_data = struct.unpack("!Bfff", data)  # Network byte order
                 print(f"Unpacked data: {unpacked_data}")
-                print(f"Received data (raw bytes): {data.hex()}")
+                print(f"Received data (raw bytes): {data.hex()}") 
 
-                message_type, temperature, humidity, light = unpacked_data
+                message_type, temperature, humidity, light = unpacked_data"""
 
-                print(f"Received: Type = {message_type}, Temp = {temperature}, Hum = {humidity}, Light = {light}")
+
+                data_str = data.decode('utf-8')  # or 'ascii' if you know it's only ASCII
+
+                # Use regular expressions to extract the values
+                match = re.match(r"Temperature: (\d+\.\d+), Humidity: (\d+\.\d+), Light: (\d+\.\d+)", data_str)
+
+                temperature = float(match.group(1))
+                humidity = float(match.group(2))
+                light = float(match.group(3))
+                print(f"Temp = {temperature}, Hum = {humidity}, Light = {light}")
+                """ print(f"Received: Type = {message_type}, Temp = {temperature}, Hum = {humidity}, Light = {light}") """
 
                 # Update global variables (converting floats to strings for display)
                 temperature = str(temperature)
                 humidity = str(humidity)
                 light = str(light)
-                last_message = f"Type: {message_type}, Temp: {temperature}, Hum: {humidity}, Light: {light}"  # For general Message
-
-            except struct.error as e:
-                print(f"Error unpacking data: {e}")
-                print(f"Received data (raw bytes): {data.hex()}")  # Print the raw bytes for debugging
+                #last_message = f"Type: {message_type}, Temp: {temperature}, Hum: {humidity}, Light: {light}"  # For general Message
 
         except ConnectionResetError:
             print("Client disconnected unexpectedly.")

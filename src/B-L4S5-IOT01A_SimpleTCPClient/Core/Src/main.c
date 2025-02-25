@@ -35,6 +35,9 @@
 #define DEFAULT_TEMP  20.0f
 #define DEFAULT_HUM   40.0f
 #define DEFAULT_LIGHT 100.0f
+#define LAST_TEMP  20.0f
+#define LAST_HUM   40.0f
+#define LAST_LIGHT 100.0f
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -1163,7 +1166,7 @@ void sendingFunction() {
     myMessage.type = 0; // Or 1 or 2
     myMessage.temp = 22.5f;
     myMessage.hum = 55.0f;
-    myMessage.light = 150.0f;
+    myMessage.light = 15.0f;
 
     WIFI_Status_t sendStatus = sendMessage(&myMessage);
 
@@ -1181,6 +1184,10 @@ uint8_t* packMessage(const mesageSent* message, uint32_t* packedSize) {
                    sizeof(message->hum) +
                    sizeof(message->light);
 
+
+    printf("Tamano bueno bueno",size);
+    printf("The value of my_uint32 is: %\n", size);
+    printf("The value of my_uint32 is: %x\n", size);
     // Allocate memory for the packed data
     uint8_t* packedData = (uint8_t*)malloc(size);
 
@@ -1209,8 +1216,9 @@ uint8_t* packMessage(const mesageSent* message, uint32_t* packedSize) {
 	printf("Packed Data (Hex):\n");
 	for (uint32_t i = 0; i < size; i++) {
 		printf("%02X ", packedData[i]); // %02X formats the byte as a two-digit hexadecimal number with leading zero if needed.
-	}
 
+	}
+	printf("YA ESTAMOS AQUIII");
     return packedData;
 }
 
@@ -1229,7 +1237,8 @@ WIFI_Status_t sendMessage(const mesageSent* message) {
     }
 
     // Assuming WIFI_SendData takes a byte array and its length
-    WIFI_Status_t status = WIFI_SendData(0, packedData, packedSize, NULL, 5000);
+    WIFI_Status_t status = WIFI_SendData(0, packedData, 20, NULL, 5000);
+    printf(sizeof(&packedData));
 
     // Free the allocated memory
     free(packedData);
