@@ -1,16 +1,17 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Threshold Setup</title>
+    <title>Flower smart pot</title>
 </head>
 <body>
-    <h1>Set Up Thresholds</h1>
+    <h1>Flower smart pot</h1>
+    <h2>Set Up Thresholds</h2>
     <form method="post">
-        <label for="humidity">Humidity:</label>
-        <input type="number" step="0.1" id="humidity" name="humidity" value="{{ humidity_threshold }}"> %<br><br>
-
         <label for="temperature">Temperature:</label>
         <input type="number" step="0.1" id="temperature" name="temperature" value="{{ temperature_threshold }}"> °C<br><br>
+
+        <label for="humidity">Humidity:</label>
+        <input type="number" step="0.1" id="humidity" name="humidity" value="{{ humidity_threshold }}"> %<br><br>
 
         <label for="light">Light:</label>
         <input type="number" step="0.1" id="light" name="light" value="{{ light_threshold }}"> lux<br><br>

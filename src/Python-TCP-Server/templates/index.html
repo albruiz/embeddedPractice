@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>IOT01 Sensor Data</title>
+    <title>Flower smart pot</title>
     <script>
         function updateSensorData() {
             fetch('/api/sensors')
@@ -10,10 +10,21 @@
                     document.getElementById('temperature-display').innerText = data.temperature;
                     document.getElementById('humidity-display').innerText = data.humidity;
                     document.getElementById('light-display').innerText = data.light;
+                    document.getElementById('timestamp-display').innerText = data.timestamp;
+                    document.getElementById('message-display').innerText = data.message;
                 })
                 .catch(error => {
                     console.error('Error fetching sensor data:', error);
                 });
+        }
+
+        function toggleMessage() {
+            var messageElement = document.getElementById('last-message-container');
+            if (messageElement.style.display === 'none') {
+                messageElement.style.display = 'block';
+            } else {
+                messageElement.style.display = 'none';
+            }
         }
 
         // Update the sensor data every 1 second
@@ -24,19 +35,24 @@
     </script>
 </head>
 <body>
-    <h1>IOT01 Sensor Data</h1>
+    <h1>Flower smart pot</h1>
 
     <p><b>Temperature:</b> <span id="temperature-display">{{ temperature }}</span> °C</p>
     <p><b>Humidity:</b> <span id="humidity-display">{{ humidity }}</span> %</p>
     <p><b>Light:</b> <span id="light-display">{{ light }}</span> lux</p>
-    <p><b>Last message</b> <span id="message-display">{{ message }}</span> </p>
-
+    <p><b>Timestamp:</b> <span id="timestamp-display">{{ timestamp }}</span> </p>
+    
     <form method="post">
         <button type="submit" name="update_now">Update Now</button>
         <button type="submit" name="set_up_timer">Set Up Timer</button>
         <button type="submit" name="set_up_thresholds">Set Up Thresholds</button>
-        <input type="hidden" name="action" value="send_hello">
-        <button type="submit">Send Hello to STM</button>
+        <button type="submit" name="send_hello">Send Hello to STM</button>
     </form>
+
+    <div id="last-message-container" style="display: none;">
+        <p><b>Last message</b> <span id="message-display">{{ message }}</span> </p>
+    </div>
+
+    <button onclick="toggleMessage()">Toggle Display of Last Message</button>
 </body>
 </html>

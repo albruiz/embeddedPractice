@@ -1,10 +1,6 @@
 from flask import Flask, render_template, jsonify, request, redirect, url_for
-import socket
-import threading
-import struct  # Import the struct module
-import socket as socketlib
-import sys # For checking byte order
-import re
+import socket, threading, struct, datetime
+# import sys, re
 
 app = Flask(__name__)
 
@@ -12,21 +8,74 @@ app = Flask(__name__)
 HOST = '0.0.0.0'  # Listen on all interfaces
 PORT = 48569
 
-# Global variables to store sensor data
-temperature = "N/A"
-humidity = "N/A"
-light = "N/A"
-last_message = "No message received yet."  # for the general message
+# Communication protocol
+BUFFER_SIZE_HELLO_MSG = 50  # 1 + 49 = 50 bytes
+MESSAGE_TYPE_HELLO = 0
+BUFFER_SIZE_SENSORS_UPDATE = 25 # 1 + 4*6 = 25 bytes
+MESSAGE_TYPE_SENSORS_UPDATE = 1
+# BUFFER_SIZE_TIMER_UPDATE 5 # 1 + 4 = 5 bytes
+MESSAGE_TYPE_TIMER_UPDATE = 2
+BUFFER_SIZE_THRESHOLD_UPDATE = 13 # 1 + 4*3 = 13 bytes
+MESSAGE_TYPE_THRESHOLD_UPDATE = 3
+BUFFER_SIZE_REQUEST_UPDATE = 50  # 1 + 49 = 50 bytes
+MESSAGE_TYPE_SENSORS_REQUEST = 4
+
 conn = None
 
-# Global thresholds (initial values)
-humidity_threshold = 40.0
-temperature_threshold = 20.0
-light_threshold = 100.0
+def pack_hello_message(message):
+    """Packs a HelloMessage into bytes."""
+    message_bytes = message.encode('utf-8')
+    truncated_message_bytes = message_bytes[:BUFFER_SIZE_HELLO_MSG]  # Truncate the message
+    format_string = "<B{}s".format(len(truncated_message_bytes))
+    return struct.pack(format_string, MESSAGE_TYPE_HELLO, truncated_message_bytes)
+
+def pack_timer_update_message(timer_value):
+    """Packs a TimerUpdateMessage into bytes."""
+    return struct.pack("<BI", MESSAGE_TYPE_TIMER_UPDATE, timer_value)  # I = uint32_t
+
+def pack_threshold_update_message(temperature, humidity, light):
+    """Packs a ThresholdUpdateMessage into bytes."""
+    return struct.pack("<Bfff", MESSAGE_TYPE_THRESHOLD_UPDATE, temperature, humidity, light)
+
+def pack_update_request(message):
+    message_bytes = message.encode('utf-8')
+    truncated_message_bytes = message_bytes[:BUFFER_SIZE_REQUEST_UPDATE]  # Truncate the message
+    format_string = "<B{}s".format(len(truncated_message_bytes))
+    return struct.pack(format_string, MESSAGE_TYPE_SENSORS_REQUEST, truncated_message_bytes)
+
+def send_message(conn, message_type, data):
+    """Sends a message to the IOT01 board."""
+    if message_type == MESSAGE_TYPE_HELLO:
+        packed_message = pack_hello_message(data)  # data is the string message
+    elif message_type == MESSAGE_TYPE_TIMER_UPDATE:
+        packed_message = pack_timer_update_message(int(data))  # data is the timer value
+    elif message_type == MESSAGE_TYPE_THRESHOLD_UPDATE:
+        packed_message = pack_threshold_update_message(data[0], data[1], data[2]) #data is the threshold
+    elif message_type == MESSAGE_TYPE_SENSORS_REQUEST:
+        packed_message = pack_update_request(data)  # data is the message
+    else:
+        print("Invalid message type")
+        return
+    print(f"Sending message: {packed_message.hex()}")
+
+    conn.sendall(packed_message)
+
+
+# Sensor variables initialization
+temperature = None
+humidity = None
+light = None
+last_message = "No message received yet."  # for the general message
+timestamp = "No timestamp yet."
+
+# Global thresholds initialization
+temperature_threshold = None
+humidity_threshold = None
+light_threshold = None
 
 def tcp_server():
     """Creates a TCP server to receive data and updates sensor data."""
-    global temperature, humidity, light, last_message, conn
+    global temperature, humidity, light, last_message, timestamp, last_message, temperature_threshold, humidity_threshold, light_threshold, conn
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
@@ -44,39 +93,34 @@ def tcp_server():
     while True:
         try:
             # Expecting: uint8_t, float, float, float  (1 + 4 + 4 + 4 = 13 bytes)
-            data = conn.recv(100)  # Adjust buffer size to match the struct size
-
+            data = conn.recv(BUFFER_SIZE_SENSORS_UPDATE)  # Adjust buffer size to match the struct size
+            timestamp = datetime.datetime.now().strftime("%H:%M:%S")
             if not data:
                 print("Client disconnected.")
                 break
+            if len(data) != BUFFER_SIZE_SENSORS_UPDATE: #Verify if you received all the data
+                print("Incomplete data received.  Skipping...")
+                continue
 
-            else:
+            try:
                 # Unpack the received data, assuming network byte order
-                """ print(data,'-------------')
-                unpacked_data = struct.unpack("!Bfff", data)  # Network byte order
-                print(f"Unpacked data: {unpacked_data}")
-                print(f"Received data (raw bytes): {data.hex()}") 
+                unpacked_data = struct.unpack("<Bffffff", data)  # Little-endian order
 
-                message_type, temperature, humidity, light = unpacked_data"""
+                if unpacked_data[0] == MESSAGE_TYPE_SENSORS_UPDATE:
+                    message_type, temperature_val, humidity_val, light_val, temperature_threshold, humidity_threshold, light_threshold = unpacked_data
+                
+                    temperature = str(round(temperature_val, 2))  # Round to 2 decimal places
+                    humidity = str(round(humidity_val, 2))        # Round to 2 decimal places
+                    light = str(round(light_val, 2))          # Round to 2 decimal places
+                    
+                    last_message = f"Received at {timestamp}: Type: {message_type}, Temp: {temperature}, Hum: {humidity}, Light: {light}, Temp Threshold: {temperature_threshold}, Hum Threshold: {humidity_threshold}, Light Threshold: {light_threshold}"  # For general Message
 
-
-                data_str = data.decode('utf-8')  # or 'ascii' if you know it's only ASCII
-
-                # Use regular expressions to extract the values
-                match = re.match(r"Temperature: (\d+\.\d+), Humidity: (\d+\.\d+), Light: (\d+\.\d+)", data_str)
-
-                temperature = float(match.group(1))
-                humidity = float(match.group(2))
-                light = float(match.group(3))
-                print(f"Temp = {temperature}, Hum = {humidity}, Light = {light}")
-                """ print(f"Received: Type = {message_type}, Temp = {temperature}, Hum = {humidity}, Light = {light}") """
-
-                # Update global variables (converting floats to strings for display)
-                temperature = str(temperature)
-                humidity = str(humidity)
-                light = str(light)
-                #last_message = f"Type: {message_type}, Temp: {temperature}, Hum: {humidity}, Light: {light}"  # For general Message
-
+                    # print(last_message)
+                
+            except struct.error as e:
+                print(f"Struct unpack error: {e}")
+                print(f"Received data: {data.hex()}") # Print the raw bytes to debug.
+                continue  # Skip to the next iteration if unpacking fails.
         except ConnectionResetError:
             print("Client disconnected unexpectedly.")
             break
@@ -92,13 +136,17 @@ def tcp_server():
 @app.route("/", methods=['GET', 'POST'])
 def index():
     """Renders the main page with sensor data and handles button clicks."""
-    global conn
+    global timestamp, conn
 
     if request.method == 'POST':
         if 'update_now' in request.form:
-            # Future functionality for "Update Now" button
-            print("Update Now button pressed.")
-            pass  # Add your functionality here
+            if conn:  # Check if there's a valid connection
+                try:
+                    send_message(conn, MESSAGE_TYPE_SENSORS_REQUEST, "Update Now")
+                except Exception as e:
+                        print(f"Error sending data: {e}")
+            else:
+                print("No connection to send 'Hello' message!")
         elif 'set_up_timer' in request.form:
             return redirect(url_for('timer_setup'))
         elif 'set_up_thresholds' in request.form:
@@ -106,9 +154,10 @@ def index():
         elif 'send_hello' in request.form:  # to mantain the function
             if conn:  # Check if there's a valid connection
                 try:
-                    hello_message = "settings_timer_30"
-                    conn.sendall(hello_message.encode('utf-8'))
-                    print(f"Sent: {hello_message}")
+                    hello_message = "Hello from Web!"
+                    # conn.sendall(hello_message.encode('utf-8'))
+                    send_message(conn, MESSAGE_TYPE_HELLO, hello_message)
+                    # print(f"Sent: {hello_message}")
                 except Exception as e:
                     print(f"Error sending data: {e}")
             else:
@@ -119,6 +168,7 @@ def index():
         temperature=temperature,
         humidity=humidity,
         light=light,
+        timestamp=timestamp,
         message=last_message
     )
 
@@ -126,8 +176,8 @@ def index():
 @app.route("/api/sensors")
 def get_sensors_data():
     """API endpoint to get sensor data as JSON."""
-    global temperature, humidity, light
-    return jsonify(temperature=temperature, humidity=humidity, light=light)
+    global temperature, humidity, light, timestamp, last_message
+    return jsonify(temperature=temperature, humidity=humidity, light=light, timestamp=timestamp, message=last_message)
 
 
 @app.route("/timer_setup", methods=['GET', 'POST'])
@@ -138,9 +188,7 @@ def timer_setup():
             timer_value = request.form['timer_value']
             if conn:
                 try:
-                    message = f"new timing set up: {timer_value}"
-                    conn.sendall(message.encode('utf-8'))
-                    print(f"Sent: {message}")
+                    send_message(conn, MESSAGE_TYPE_TIMER_UPDATE, timer_value)
                 except Exception as e:
                     print(f"Error sending timer setup message: {e}")
             return redirect(url_for('index'))  # Return to the main page
@@ -162,9 +210,7 @@ def threshold_setup():
                 temperature_threshold = float(request.form['temperature'])
                 light_threshold = float(request.form['light'])
                 if conn:
-                    message = f"new thresholds set up: Humidity={humidity_threshold}, Temperature={temperature_threshold}, Light={light_threshold}"
-                    conn.sendall(message.encode('utf-8'))
-                    print(f"Sent: {message}")
+                    send_message(conn, MESSAGE_TYPE_THRESHOLD_UPDATE, (temperature_threshold, humidity_threshold, light_threshold))
             except ValueError:
                 print("Invalid threshold values.")
             return redirect(url_for('index'))

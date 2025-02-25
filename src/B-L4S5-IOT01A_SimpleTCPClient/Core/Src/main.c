@@ -22,7 +22,10 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "wifi.h"
-
+#include "stm32l4s5i_iot01.h"
+#include "stm32l4s5i_iot01_tsensor.h"
+#include "stm32l4s5i_iot01_hsensor.h"
+#include <stdlib.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -32,12 +35,19 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define BUFFER_SIZE_HELLO_MSG 50
+#define BUFFER_SIZE_SENSORS_UPDATE 25 // 1 + 4*6 = 25 bytes
+#define BUFFER_SIZE_TIMER_UPDATE 5 // 1 + 4 = 5
+#define BUFFER_SIZE_THRESHOLD_UPDATE 13 // 1 + 4*3 = 13 bytes
 #define DEFAULT_TEMP  20.0f
 #define DEFAULT_HUM   40.0f
 #define DEFAULT_LIGHT 100.0f
-#define LAST_TEMP  20.0f
-#define LAST_HUM   40.0f
-#define LAST_LIGHT 100.0f
+#define DEFAULT_TEMP_THRE  35.0f
+#define DEFAULT_HUM_THRE   70.0f
+#define DEFAULT_LIGHT_THRE 200.0f
+//#define LAST_TEMP  20.0f
+//#define LAST_HUM   40.0f
+//#define LAST_LIGHT 100.0f
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -84,7 +94,41 @@ uint8_t pu8TxData [500];
 uint8_t pu8RxData [500];
 int iSendDataLength;
 int iReceivedDataLength;
-// Define the structure
+
+float gTemperature = DEFAULT_TEMP;  // global temperature variable
+float gHumidity = DEFAULT_HUM;     // global humidity variable
+float gLight = DEFAULT_LIGHT;      // global light level variable
+
+float gTempThreshold = DEFAULT_TEMP_THRE;
+float gHumThreshold = DEFAULT_HUM_THRE;
+float gLightThreshold = DEFAULT_LIGHT_THRE;
+
+// Define the structures
+typedef enum {
+    MESSAGE_TYPE_HELLO = 0,
+    MESSAGE_TYPE_UPDATE,
+    MESSAGE_TYPE_TIMER_UPDATE,
+    MESSAGE_TYPE_THRESHOLD_UPDATE,
+    MESSAGE_TYPE_SENSORS_REQUEST
+} MessageType;
+
+typedef struct {
+    uint8_t type;  // MessageType (defined above)
+    char message[BUFFER_SIZE_HELLO_MSG]; // "Hello from web" message
+} HelloMessage;
+
+typedef struct {
+    uint8_t type;       // MessageType
+    uint32_t timer_value;  // New timer value (seconds)
+} TimerUpdateMessage;
+
+typedef struct {
+    uint8_t type;       // MessageType
+    float temperature_threshold;
+    float humidity_threshold;
+    float light_threshold;
+} ThresholdUpdateMessage;
+
 typedef struct {
     uint8_t type;  // 0 to 2 (3 possible values) 0=UpdateNow, 1=SetUpTimer, 2=SetUpThresholds
     uint8_t time;  // 0 to 3 (4 possible values) (def)0=30s, 1=1min, 2=5min, 3=30min
@@ -99,13 +143,19 @@ typedef struct {
 	float temp;    // Temperature (can be negative) (def 20.0)
 	float hum;     // Humidity (def 40.0)
 	float light;   // Light level (def 100.0)
-	} mesageSent;
+	float temperature_threshold;
+  float humidity_threshold;
+  float light_threshold;
+} mesageSent;
 #pragma pack(pop)
 
+void processReceivedData(uint8_t* data, int dataLength);
 messageReceived parseMessage(const char *rxData);
-void sendingFunction();
+void sendData();
 WIFI_Status_t sendMessage(const mesageSent* message);
+//WIFI_Status_t sendThresholds();
 uint8_t* packMessage(const mesageSent* message, uint32_t* packedSize);
+void readSensorValues();
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -137,25 +187,26 @@ static void MX_RNG_Init(void);
   * @brief  The application entry point.
   * @retval int
   */
-int main(void)
-{
+int main(void){
   /* USER CODE BEGIN 1 */
-	char pcRouterSSID[] = "MOVISTAR_D0F0";
-	char pcRouterPWR[] = "faGAEandMxjdVvMwAqJa";
-	WIFI_Ecn_t	enRoutreEncryptiontype = WIFI_ECN_WPA2_PSK; // set your Router encryption
-	// change to your IP router
-	pu8RemoteIpv4[0] = 192;
-	pu8RemoteIpv4[1] = 168;
-	pu8RemoteIpv4[2] = 1;
-	pu8RemoteIpv4[3] = 35;
+  WIFI_Ecn_t  enRoutreEncryptiontype = WIFI_ECN_WPA2_PSK; // set your Router encryption
+  uint16_t port = 48569;
 
-	float temperature = 20.0f;
-	float humidity = 50.0f;
-	float light = 100.0f;
-	char message[100];
+  /* Configuracion de Alberto */
+//	char pcRouterSSID[] = "MOVISTAR_D0F0"; // Alberto
+//	char pcRouterPWR[] = "faGAEandMxjdVvMwAqJa"; // Alberto
+//  pu8RemoteIpv4[0] = 192;
+//  pu8RemoteIpv4[1] = 168;
+//  pu8RemoteIpv4[2] = 1;
+//  pu8RemoteIpv4[3] = 35;
 
-
-
+  /* Configuracion de Carlos */
+	char pcRouterSSID[] = "2-1-M11"; // Alberto
+  char pcRouterPWR[] = "Mercader19012768"; // Alberto
+  pu8RemoteIpv4[0] = 192;
+  pu8RemoteIpv4[1] = 168;
+  pu8RemoteIpv4[2] = 31;
+  pu8RemoteIpv4[3] = 12;
 
   /* USER CODE END 1 */
 
@@ -191,96 +242,65 @@ int main(void)
   MX_USART2_UART_Init();
   MX_USART3_UART_Init();
   MX_USB_OTG_FS_USB_Init();
+  BSP_TSENSOR_Init(); // Initialize Temperature sensor
+  BSP_HSENSOR_Init(); // Initialize Humidity sensor
   MX_RNG_Init();
   /* USER CODE BEGIN 2 */
 
-  // Init Wifi module
-  printf("***  Init WIFI  ***\n\r");
-  if(WIFI_Init() == WIFI_STATUS_OK)
-  {
-	  printf("Init WIFI: Success\n\n\r");
-	  printf("************************ WiFi Module Infos ************************\n\n\r");
+  // WiFi module initialization
+  printf("*  WiFi module initialization *\n\r");
+  if(WIFI_Init() == WIFI_STATUS_OK){
+	  printf("WIFI initialization success\n\n\r");
+	  printf("************************ WiFi Module infos ************************\n\n\r");
 	  // get module name
-	  if(WIFI_GetModuleName(pcWifiModuleName) == WIFI_STATUS_OK)
-	  {
+	  if(WIFI_GetModuleName(pcWifiModuleName) == WIFI_STATUS_OK){
 		  printf("Wifi Module Name: %s\n\r",pcWifiModuleName);
-	  }
-	  else
-	  {
+	  }else{
 		  printf(">> couldn't get Wifi module name\n\r");
 	  }
 	  // get module ID
-	  if(WIFI_GetModuleID(pcWifiModuleId) == WIFI_STATUS_OK)
-	  {
+	  if(WIFI_GetModuleID(pcWifiModuleId) == WIFI_STATUS_OK){
 		  printf("Wifi Module ID: %s\n\r",pcWifiModuleId);
-	  }
-	  else
-	  {
+	  }else{
 		  printf(">> couldn't get Wifi module ID\n\r");
 	  }
 	  // get module Firmware revision
-	  if(WIFI_GetModuleFwRevision(pcWifiModuleFwRev) == WIFI_STATUS_OK)
-	  {
+	  if(WIFI_GetModuleFwRevision(pcWifiModuleFwRev) == WIFI_STATUS_OK){
 		  printf("Wifi Module Firmware revision: %s\n\r",pcWifiModuleFwRev);
-	  }
-	  else
-	  {
+	  }else{
 		  printf(">> couldn't get Wifi module Firmware revision\n\r");
 	  }
 	  // get module Mac@
-	  if(WIFI_GetMAC_Address(pu8WifiModuleMacAddress) == WIFI_STATUS_OK)
-	  {
+	  if(WIFI_GetMAC_Address(pu8WifiModuleMacAddress) == WIFI_STATUS_OK){
 		  printf("Wifi Module MAC address: %02X-%02X-%02X-%02X-%02X-%02X\n\r",
 				  pu8WifiModuleMacAddress[0],pu8WifiModuleMacAddress[1],
 				  pu8WifiModuleMacAddress[2],pu8WifiModuleMacAddress[3],
 				  pu8WifiModuleMacAddress[4],pu8WifiModuleMacAddress[5]);
-	  }
-	  else
-	  {
+	  }else{
 		  printf(">> couldn't get Wifi module MAC address\n\r");
 	  }
 	  printf("*******************************************************************\n\r");
 
-	  // Connect to router
-	  if(WIFI_Connect(pcRouterSSID, pcRouterPWR, enRoutreEncryptiontype) == WIFI_STATUS_OK)
-	  {
+	  // Connection to AP
+	  if(WIFI_Connect(pcRouterSSID, pcRouterPWR, enRoutreEncryptiontype) == WIFI_STATUS_OK){
 		  printf("Successfully connected to router %s\n\r", pcRouterSSID);
-		  // get ip address
-		  if(WIFI_GetIP_Address(pu8LocalIpv4) == WIFI_STATUS_OK)
-		  {
-			  printf("Device IPv4: %u.%u.%u.%u\n\r",
-					  pu8LocalIpv4[0],pu8LocalIpv4[1],
-					  pu8LocalIpv4[2],pu8LocalIpv4[3]);
+		  if(WIFI_GetIP_Address(pu8LocalIpv4) == WIFI_STATUS_OK){ // get ip address
+			  printf("Device IPv4: %u.%u.%u.%u\n\r", pu8LocalIpv4[0],pu8LocalIpv4[1], pu8LocalIpv4[2],pu8LocalIpv4[3]);
 		  }
 
 		  // Open TCP client
-		  if(WIFI_OpenClientConnection(0, WIFI_TCP_PROTOCOL, "TCP_CLIENT", pu8RemoteIpv4, 48569, 0) == WIFI_STATUS_OK)
-		  {
-			  // send msg to server
-			  printf("successfully TCP client created\n\r");
-			  //if(WIFI_SendData(0,"Hello from STM", 14, NULL, 1000) == WIFI_STATUS_OK)
-			  //{
-			  //	printf("successfully sent welcome message to TCP server\n\r");
-			  //}
-			  //else
-			  //{
-			  //	printf(">> failed to send welcome msg to TCP server\n\r");
-			  //}
-		  }
-		  else
-		  {
+		  if(WIFI_OpenClientConnection(0, WIFI_TCP_PROTOCOL, "TCP_CLIENT", pu8RemoteIpv4, port , 0) == WIFI_STATUS_OK){
+			  printf("TCP client successfully created. \n\r");
+//			  sendData(); // send initial data.
+		  }else{
 			  printf(">> couldn't create TCP client\n\r");
 		  }
-
-	  }
-	  else
-	  {
+	  }else{
 		  printf(">> couldn't connect to router\n\r");
 	  }
-  }
-  else
-  {
+  }else{
 	  printf(">> Init WIFI: Failed\n\r");
+	  return;
   }
 
 
@@ -288,41 +308,34 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  while (1)
-  {
+  while (1){
     /* USER CODE END WHILE */
 
-	  sprintf(message, "Temperature: %.2f, Humidity: %.2f, Light: %.2f", temperature, humidity, light);
+//    gTemperature += 0.5f;
+//    gHumidity += 0.5f;
+//    gLight += 0.5f;
 
-	  if(WIFI_SendData(0, message, strlen(message), NULL, 1000) == WIFI_STATUS_OK)
-	  {
-		  printf("Sent: %s\n\r", message);
-	  }
-	  else
-	  {
-		  printf(">> Failed to send data\n\r");
-	  }
+    readSensorValues();
 
-	  sendingFunction();
-
-
-	  HAL_Delay(2000);
-
-	  if(WIFI_ReceiveData(0, pu8RxData, sizeof(pu8RxData), &iReceivedDataLength, 5000) == WIFI_STATUS_OK)
-	  {
-		  if(iReceivedDataLength>0)
-		  {
+    WIFI_Status_t receive_status = WIFI_ReceiveData(0, pu8RxData, sizeof(pu8RxData), &iReceivedDataLength, 5000);
+	  if(receive_status == WIFI_STATUS_OK){
+		  if(iReceivedDataLength>0){
 			  //with'/0' set the new message end, in case the new message length is lower than the old message
 			  pu8RxData[iReceivedDataLength] = '\0';
 
-			  printf("received message from server = %s\n\r", pu8RxData);
+			  printf("Received %d bytes of data.\n\r", iReceivedDataLength);
+        processReceivedData(pu8RxData, iReceivedDataLength); // Process the received data
 
-			  messageReceived myMessage = parseMessage((const char *)pu8RxData); // Cast to const char *
+//			  printf("received message from server = %s\n\r", pu8RxData);
+
+//			  messageReceived myMessage = parseMessage((const char *)pu8RxData); // Cast to const char *
 
 			  // Now you can use the values in myMessage:
-			  printf("Parsed: Type = %u, Time = %u, Temp = %.2f, Hum = %.2f, Light = %.2f\n",myMessage.type, myMessage.time, myMessage.temp, myMessage.hum, myMessage.light);
+//			  printf("Parsed: Type = %u, Time = %u, Temp = %.2f, Hum = %.2f, Light = %.2f\n",myMessage.type, myMessage.time, myMessage.temp, myMessage.hum, myMessage.light);
 		  }
 	  }
+    sendData();
+
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
@@ -1075,6 +1088,62 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void processReceivedData(uint8_t* data, int dataLength) {
+    MessageType messageType = (MessageType)data[0]; // First byte is the message type
+
+    switch (messageType) {
+        case MESSAGE_TYPE_HELLO: {
+            if (dataLength > 1) {
+                HelloMessage hello;
+                hello.type = messageType;
+                strncpy(hello.message, (char*)data + 1, sizeof(hello.message) - 1);
+                hello.message[sizeof(hello.message) - 1] = '\0';  // Ensure null termination
+                printf("Received message: %s\n\r", hello.message);
+            }
+            break;
+        }
+        case MESSAGE_TYPE_SENSORS_REQUEST: {
+          sendData();
+          printf("Sending data as desired\n\r");
+          break;
+        }
+        case MESSAGE_TYPE_TIMER_UPDATE: {
+            if (dataLength == BUFFER_SIZE_TIMER_UPDATE) {  // 1 (type) + 4 (uint32_t timer)
+                TimerUpdateMessage timerUpdate;
+                timerUpdate.type = messageType;
+                memcpy(&timerUpdate.timer_value, data + 1, sizeof(timerUpdate.timer_value));
+                // Optionally convert from network to host byte order (if needed)
+                //timerUpdate.timer_value = ntohl(timerUpdate.timer_value);
+                printf("Received Timer Update: %u seconds\n\r", timerUpdate.timer_value);
+                // Update the internal timer with timerUpdate.timer_value
+            }
+            break;
+        }
+        case MESSAGE_TYPE_THRESHOLD_UPDATE: {
+            if (dataLength == BUFFER_SIZE_THRESHOLD_UPDATE) { // 1 (type) + 4 * 3 (float thresholds)
+                ThresholdUpdateMessage thresholdUpdate;
+                thresholdUpdate.type = messageType;
+                memcpy(&thresholdUpdate.temperature_threshold, data + 1, sizeof(thresholdUpdate.temperature_threshold));
+                memcpy(&thresholdUpdate.humidity_threshold, data + 5, sizeof(thresholdUpdate.humidity_threshold));
+                memcpy(&thresholdUpdate.light_threshold, data + 9, sizeof(thresholdUpdate.light_threshold));
+
+                printf("Received Threshold Update: Temp=%.2f, Hum=%.2f, Light=%.2f\n\r",
+                       thresholdUpdate.temperature_threshold, thresholdUpdate.humidity_threshold,
+                       thresholdUpdate.light_threshold);
+                // Check if the internal thresholds are within the limits TODO
+                // Update the internal thresholds with these values
+                gTempThreshold = thresholdUpdate.temperature_threshold;
+                gHumThreshold = thresholdUpdate.humidity_threshold;
+                gLightThreshold = thresholdUpdate.light_threshold;
+                printf("Threshold updated.\n\r");
+            }
+            break;
+        }
+        default:
+            printf("Unknown message type received: %d\n", messageType);
+            break;
+    }
+}
 
 // Function to parse the string and initialize the struct
 messageReceived parseMessage(const char *rxData) {
@@ -1161,19 +1230,22 @@ cleanup:
 }
 
 
-void sendingFunction() {
+void sendData() {
     mesageSent myMessage;
-    myMessage.type = 0; // Or 1 or 2
-    myMessage.temp = 22.5f;
-    myMessage.hum = 55.0f;
-    myMessage.light = 15.0f;
+    myMessage.type = 1;
+    myMessage.temp = gTemperature;
+    myMessage.hum = gHumidity;
+    myMessage.light = gLight;
+    myMessage.temperature_threshold = gTempThreshold;
+    myMessage.humidity_threshold = gHumThreshold;
+    myMessage.light_threshold = gLightThreshold;
 
     WIFI_Status_t sendStatus = sendMessage(&myMessage);
 
     if (sendStatus == WIFI_STATUS_OK) {
-        printf("Message sent successfully!\n");
+        printf("Message sent successfully!\n\r");
     } else {
-        printf("Error sending message!\n");
+        printf("Error sending message!\n\r");
     }
 }
 
@@ -1182,17 +1254,19 @@ uint8_t* packMessage(const mesageSent* message, uint32_t* packedSize) {
     uint32_t size = sizeof(message->type) +
                    sizeof(message->temp) +
                    sizeof(message->hum) +
-                   sizeof(message->light);
+                   sizeof(message->light) +
+                   sizeof(message->temperature_threshold) +
+                   sizeof(message->humidity_threshold) +
+                   sizeof(message->light_threshold);
 
 
-    printf("Tamano bueno bueno",size);
-    printf("The value of my_uint32 is: %\n", size);
-    printf("The value of my_uint32 is: %x\n", size);
+//    printf("Tamano bueno bueno\n\r",size);
+//    printf("The value of my_uint32 is: %x\n\r", size);
     // Allocate memory for the packed data
     uint8_t* packedData = (uint8_t*)malloc(size);
 
     if (packedData == NULL) {
-        printf("Error: Memory allocation failed for packed data.\n");
+        printf("Error: Memory allocation failed for packed data.\n\r");
         *packedSize = 0;
         return NULL;
     }
@@ -1212,13 +1286,22 @@ uint8_t* packMessage(const mesageSent* message, uint32_t* packedSize) {
     memcpy(ptr, &message->light, sizeof(message->light));
     ptr += sizeof(message->light);
 
-    *packedSize = size;
-	printf("Packed Data (Hex):\n");
-	for (uint32_t i = 0; i < size; i++) {
-		printf("%02X ", packedData[i]); // %02X formats the byte as a two-digit hexadecimal number with leading zero if needed.
+    memcpy(ptr, &message->temperature_threshold, sizeof(message->temperature_threshold));
+    ptr += sizeof(message->temperature_threshold);
 
-	}
-	printf("YA ESTAMOS AQUIII");
+    memcpy(ptr, &message->humidity_threshold, sizeof(message->humidity_threshold));
+    ptr += sizeof(message->humidity_threshold);
+
+    memcpy(ptr, &message->light_threshold, sizeof(message->light_threshold));
+    ptr += sizeof(message->light_threshold);
+
+    *packedSize = size;
+    printf("Packed Data (Hex): ");
+    for (uint32_t i = 0; i < size; i++) {
+      printf("%02X ", packedData[i]); // %02X formats the byte as a two-digit hexadecimal number with leading zero if needed.
+    }
+//	printf("\n\r");
+//	printf("YA ESTAMOS AQUIII");
     return packedData;
 }
 
@@ -1236,14 +1319,37 @@ WIFI_Status_t sendMessage(const mesageSent* message) {
         return WIFI_STATUS_ERROR;
     }
 
+    printf("(%ld bytes)\n\r", packedSize); //Print the real Packed Size
+
     // Assuming WIFI_SendData takes a byte array and its length
-    WIFI_Status_t status = WIFI_SendData(0, packedData, 20, NULL, 5000);
-    printf(sizeof(&packedData));
+    WIFI_Status_t message_status = WIFI_SendData(0, packedData, packedSize, NULL, 5000);
 
     // Free the allocated memory
     free(packedData);
 
-    return status;
+    return message_status;
+}
+
+void readSensorValues(){
+  float temp_value;
+  float hum_value;
+  temp_value = BSP_TSENSOR_ReadTemp(); // Read Temperature
+  hum_value = BSP_HSENSOR_ReadHumidity(); // Read Humidity
+
+  printf("Read Sensor values: Temp=%.2f, Hum=%.2f \n\r",
+      temp_value, hum_value);
+
+  gTemperature = temp_value;
+  gHumidity = hum_value;
+
+
+//  int tmpInt1 = temp_value;
+//  float tmpFrac = temp_value - tmpInt1;
+//  int tmpInt2 = trunc(tmpFrac * 100);
+//
+//  int humInt1 = (int)hum_value;
+//  float humFrac = hum_value - humInt1;
+//  int humInt2 = trunc(humFrac * 100);
 }
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
