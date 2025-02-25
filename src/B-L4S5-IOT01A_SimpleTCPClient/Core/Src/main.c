@@ -37,7 +37,8 @@
 /* USER CODE BEGIN PD */
 #define BUFFER_SIZE_HELLO_MSG 50
 #define BUFFER_SIZE_SENSORS_UPDATE 25 // 1 + 4*6 = 25 bytes
-#define BUFFER_SIZE_TIMER_UPDATE 5 // 1 + 4 = 5
+//#define BUFFER_SIZE_TIMER_UPDATE 5 // 1 + 4 = 5
+#define BUFFER_SIZE_TIMER_UPDATE 7
 #define BUFFER_SIZE_THRESHOLD_UPDATE 13 // 1 + 4*3 = 13 bytes
 #define DEFAULT_TEMP  20.0f
 #define DEFAULT_HUM   40.0f
@@ -74,8 +75,6 @@ I2C_HandleTypeDef hi2c2;
 OSPI_HandleTypeDef hospi1;
 
 RNG_HandleTypeDef hrng;
-
-SPI_HandleTypeDef hspi1;
 
 UART_HandleTypeDef huart4;
 UART_HandleTypeDef huart1;
@@ -167,7 +166,6 @@ static void MX_DFSDM1_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_I2C2_Init(void);
 static void MX_OCTOSPI1_Init(void);
-static void MX_SPI1_Init(void);
 static void MX_UART4_Init(void);
 static void MX_USART1_UART_Init(void);
 static void MX_USART2_UART_Init(void);
@@ -187,26 +185,28 @@ static void MX_RNG_Init(void);
   * @brief  The application entry point.
   * @retval int
   */
-int main(void){
+int main(void)
+{
+
   /* USER CODE BEGIN 1 */
   WIFI_Ecn_t  enRoutreEncryptiontype = WIFI_ECN_WPA2_PSK; // set your Router encryption
   uint16_t port = 48569;
 
   /* Configuracion de Alberto */
-//	char pcRouterSSID[] = "MOVISTAR_D0F0"; // Alberto
-//	char pcRouterPWR[] = "faGAEandMxjdVvMwAqJa"; // Alberto
-//  pu8RemoteIpv4[0] = 192;
-//  pu8RemoteIpv4[1] = 168;
-//  pu8RemoteIpv4[2] = 1;
-//  pu8RemoteIpv4[3] = 35;
+	char pcRouterSSID[] = "MOVISTAR_D0F0"; // Alberto
+	char pcRouterPWR[] = "faGAEandMxjdVvMwAqJa"; // Alberto
+	pu8RemoteIpv4[0] = 192;
+	pu8RemoteIpv4[1] = 168;
+	pu8RemoteIpv4[2] = 1;
+	pu8RemoteIpv4[3] = 35;
 
   /* Configuracion de Carlos */
-	char pcRouterSSID[] = "2-1-M11"; // Alberto
+	/*char pcRouterSSID[] = "2-1-M11"; // Alberto
   char pcRouterPWR[] = "Mercader19012768"; // Alberto
   pu8RemoteIpv4[0] = 192;
   pu8RemoteIpv4[1] = 168;
   pu8RemoteIpv4[2] = 31;
-  pu8RemoteIpv4[3] = 12;
+  pu8RemoteIpv4[3] = 12;*/
 
   /* USER CODE END 1 */
 
@@ -222,7 +222,7 @@ int main(void){
   /* Configure the system clock */
   SystemClock_Config();
 
-/* Configure the peripherals common clocks */
+  /* Configure the peripherals common clocks */
   PeriphCommonClock_Config();
 
   /* USER CODE BEGIN SysInit */
@@ -236,14 +236,11 @@ int main(void){
   MX_I2C1_Init();
   MX_I2C2_Init();
   MX_OCTOSPI1_Init();
-  MX_SPI1_Init();
   MX_UART4_Init();
   MX_USART1_UART_Init();
   MX_USART2_UART_Init();
   MX_USART3_UART_Init();
   MX_USB_OTG_FS_USB_Init();
-  BSP_TSENSOR_Init(); // Initialize Temperature sensor
-  BSP_HSENSOR_Init(); // Initialize Humidity sensor
   MX_RNG_Init();
   /* USER CODE BEGIN 2 */
 
@@ -310,31 +307,6 @@ int main(void){
   /* USER CODE BEGIN WHILE */
   while (1){
     /* USER CODE END WHILE */
-
-//    gTemperature += 0.5f;
-//    gHumidity += 0.5f;
-//    gLight += 0.5f;
-
-    readSensorValues();
-
-    WIFI_Status_t receive_status = WIFI_ReceiveData(0, pu8RxData, sizeof(pu8RxData), &iReceivedDataLength, 5000);
-	  if(receive_status == WIFI_STATUS_OK){
-		  if(iReceivedDataLength>0){
-			  //with'/0' set the new message end, in case the new message length is lower than the old message
-			  pu8RxData[iReceivedDataLength] = '\0';
-
-			  printf("Received %d bytes of data.\n\r", iReceivedDataLength);
-        processReceivedData(pu8RxData, iReceivedDataLength); // Process the received data
-
-//			  printf("received message from server = %s\n\r", pu8RxData);
-
-//			  messageReceived myMessage = parseMessage((const char *)pu8RxData); // Cast to const char *
-
-			  // Now you can use the values in myMessage:
-//			  printf("Parsed: Type = %u, Time = %u, Temp = %.2f, Hum = %.2f, Light = %.2f\n",myMessage.type, myMessage.time, myMessage.temp, myMessage.hum, myMessage.light);
-		  }
-	  }
-    sendData();
 
     /* USER CODE BEGIN 3 */
   }
@@ -697,46 +669,6 @@ static void MX_RNG_Init(void)
 }
 
 /**
-  * @brief SPI1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_SPI1_Init(void)
-{
-
-  /* USER CODE BEGIN SPI1_Init 0 */
-
-  /* USER CODE END SPI1_Init 0 */
-
-  /* USER CODE BEGIN SPI1_Init 1 */
-
-  /* USER CODE END SPI1_Init 1 */
-  /* SPI1 parameter configuration*/
-  hspi1.Instance = SPI1;
-  hspi1.Init.Mode = SPI_MODE_MASTER;
-  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
-  hspi1.Init.DataSize = SPI_DATASIZE_4BIT;
-  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
-  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
-  hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_4;
-  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
-  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
-  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-  hspi1.Init.CRCPolynomial = 7;
-  hspi1.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
-  hspi1.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
-  if (HAL_SPI_Init(&hspi1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN SPI1_Init 2 */
-
-  /* USER CODE END SPI1_Init 2 */
-
-}
-
-/**
   * @brief UART4 Initialization Function
   * @param None
   * @retval None
@@ -957,6 +889,8 @@ static void MX_USB_OTG_FS_USB_Init(void)
 static void MX_GPIO_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
+/* USER CODE BEGIN MX_GPIO_Init_1 */
+/* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOE_CLK_ENABLE();
@@ -970,8 +904,8 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(ST25DV04K_RF_DISABLE_GPIO_Port, ST25DV04K_RF_DISABLE_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, ARD_D10_Pin|ARD_D4_Pin|ARD_D7_Pin|SPBTLE_RF_RST_Pin
-                          |ARD_D9_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, ARD_D10_Pin|ARD_D4_Pin|ARD_D7_Pin|GPIO_PIN_5
+                          |SPBTLE_RF_RST_Pin|ARD_D9_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, ARD_D8_Pin|ISM43362_BOOT0_Pin|LED2_Pin|SPSGRF_915_SDN_Pin
@@ -1002,13 +936,21 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : ARD_D10_Pin ARD_D4_Pin ARD_D7_Pin SPBTLE_RF_RST_Pin
-                           ARD_D9_Pin */
-  GPIO_InitStruct.Pin = ARD_D10_Pin|ARD_D4_Pin|ARD_D7_Pin|SPBTLE_RF_RST_Pin
-                          |ARD_D9_Pin;
+  /*Configure GPIO pins : ARD_D10_Pin ARD_D4_Pin ARD_D7_Pin PA5
+                           SPBTLE_RF_RST_Pin ARD_D9_Pin */
+  GPIO_InitStruct.Pin = ARD_D10_Pin|ARD_D4_Pin|ARD_D7_Pin|GPIO_PIN_5
+                          |SPBTLE_RF_RST_Pin|ARD_D9_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : ARD_D12_Pin ARD_D11_Pin */
+  GPIO_InitStruct.Pin = ARD_D12_Pin|ARD_D11_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+  GPIO_InitStruct.Alternate = GPIO_AF5_SPI1;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pin : ARD_D3_Pin */
@@ -1085,6 +1027,8 @@ static void MX_GPIO_Init(void)
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(EXTI15_10_IRQn);
 
+/* USER CODE BEGIN MX_GPIO_Init_2 */
+/* USER CODE END MX_GPIO_Init_2 */
 }
 
 /* USER CODE BEGIN 4 */

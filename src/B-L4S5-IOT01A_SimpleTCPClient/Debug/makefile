@@ -9,7 +9,6 @@ RM := rm -rf
 
 # All of the sources participating in the build are defined here
 -include sources.mk
--include Middlewares/Third_Party/Wifi/subdir.mk
 -include Drivers/STM32L4xx_HAL_Driver/Src/subdir.mk
 -include Drivers/BSP/Components/st25dv/subdir.mk
 -include Drivers/BSP/Components/hts221/subdir.mk
@@ -65,8 +64,8 @@ all: main-build
 main-build: B-L4S5-IOT01A_SimpleTCPClient.elf secondary-outputs
 
 # Tool invocations
-B-L4S5-IOT01A_SimpleTCPClient.elf B-L4S5-IOT01A_SimpleTCPClient.map: $(OBJS) $(USER_OBJS) C:\ST\workspace\embeddedPractice\src\B-L4S5-IOT01A_SimpleTCPClient\STM32L4S5VITX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "B-L4S5-IOT01A_SimpleTCPClient.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\ST\workspace\embeddedPractice\src\B-L4S5-IOT01A_SimpleTCPClient\STM32L4S5VITX_FLASH.ld" --specs=nosys.specs -Wl,-Map="B-L4S5-IOT01A_SimpleTCPClient.map" -Wl,--gc-sections -static -u _print_float --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -u _printf_float -u _scanf_float -Wl,--start-group -lc -lm -Wl,--end-group
+B-L4S5-IOT01A_SimpleTCPClient.elf B-L4S5-IOT01A_SimpleTCPClient.map: $(OBJS) $(USER_OBJS) D:\DESKTOP\ D\UC3M-MASTER\EMBEDDED\ SYSTEM\WS2\embeddedPractice\src\B-L4S5-IOT01A_SimpleTCPClient\STM32L4S5VITX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "B-L4S5-IOT01A_SimpleTCPClient.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"D:\DESKTOP D\UC3M-MASTER\EMBEDDED SYSTEM\WS2\embeddedPractice\src\B-L4S5-IOT01A_SimpleTCPClient\STM32L4S5VITX_FLASH.ld" --specs=nosys.specs -Wl,-Map="B-L4S5-IOT01A_SimpleTCPClient.map" -Wl,--gc-sections -static -u _print_float --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -u _printf_float -u _scanf_float -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

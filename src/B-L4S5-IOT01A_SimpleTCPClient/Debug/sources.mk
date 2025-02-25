@@ -29,5 +29,4 @@ Drivers/BSP/Components/es_wifi \
 Drivers/BSP/Components/hts221 \
 Drivers/BSP/Components/st25dv \
 Drivers/STM32L4xx_HAL_Driver/Src \
-Middlewares/Third_Party/Wifi \
 
