@@ -1,23 +1,20 @@
-from flask import Flask, render_template, jsonify, request, redirect, url_for
-from flask_socketio import SocketIO, emit
-import socket, threading, struct, datetime, requests
-# import sys, re
+from flask import Flask, render_template, jsonify, request, redirect, url_for, session
+import socket, threading, struct, datetime
 
 app = Flask(__name__)
-socketio = SocketIO(app)
+app.secret_key = 'very_secret'  # Required for using session
 
 # Server configuration
 HOST = '0.0.0.0'  # Listen on all interfaces
 PORT = 48569
+
+counterDebugBorrar = 0
 
 # Communication protocol
 BUFFER_SIZE_HELLO_MSG = 50  # 1 + 49 = 50 bytes
 MESSAGE_TYPE_HELLO = 0
 BUFFER_SIZE_SENSORS_UPDATE = 25 # 1 + 4*6 = 25 bytes
 MESSAGE_TYPE_SENSORS_UPDATE = 1
-MESSAGE_TYPE_WARNING_TEMP = 5
-MESSAGE_TYPE_WARNING_HUM = 6
-MESSAGE_TYPE_WARNING_LIGHT = 7
 # BUFFER_SIZE_TIMER_UPDATE 5 # 1 + 4 = 5 bytes
 MESSAGE_TYPE_TIMER_UPDATE = 2
 BUFFER_SIZE_THRESHOLD_UPDATE = 13 # 1 + 4*3 = 13 bytes
@@ -26,7 +23,6 @@ BUFFER_SIZE_REQUEST_UPDATE = 50  # 1 + 49 = 50 bytes
 MESSAGE_TYPE_SENSORS_REQUEST = 4
 
 conn = None
-
 
 def pack_hello_message(message):
     """Packs a HelloMessage into bytes."""
@@ -73,7 +69,6 @@ humidity = None
 light = None
 last_message = "No message received yet."  # for the general message
 timestamp = "No timestamp yet."
-alarmMessage = None
 
 # Global thresholds initialization
 temperature_threshold = None
@@ -82,7 +77,7 @@ light_threshold = None
 
 def tcp_server():
     """Creates a TCP server to receive data and updates sensor data."""
-    global temperature, humidity, light, last_message, timestamp, last_message, temperature_threshold, humidity_threshold, light_threshold, conn, alarmMessage
+    global temperature, humidity, light, last_message, timestamp, last_message, temperature_threshold, humidity_threshold, light_threshold, conn
 
     server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
@@ -113,30 +108,20 @@ def tcp_server():
                 # Unpack the received data, assuming network byte order
                 unpacked_data = struct.unpack("<Bffffff", data)  # Little-endian order
 
-                if unpacked_data[0] == MESSAGE_TYPE_SENSORS_UPDATE or unpacked_data[0] == 5 or unpacked_data[0] == 6 or unpacked_data[0] == 7:
+                if unpacked_data[0] == MESSAGE_TYPE_SENSORS_UPDATE:
                     message_type, temperature_val, humidity_val, light_val, temperature_threshold, humidity_threshold, light_threshold = unpacked_data
                 
                     temperature = str(round(temperature_val, 2))  # Round to 2 decimal places
                     humidity = str(round(humidity_val, 2))        # Round to 2 decimal places
                     light = str(round(light_val, 2))          # Round to 2 decimal places
                     
-                    if(message_type == 5):
-                        alarmMessage = "WARNING! THE TEMPERATURE IS TOO HIGH"
-                    elif(message_type == 6):
-                        alarmMessage = "WARNING! THE HUMIDITY IS TOO HIGH"
-                    elif(message_type == 7):
-                        alarmMessage = "WARNING! THE LIGHT IS TOO HIGH - CLOSING THE SHUTTERS"
-                    else:
-                        alarmMessage = "Every is value is OK"
-
                     last_message = f"Received at {timestamp}: Type: {message_type}, Temp: {temperature}, Hum: {humidity}, Light: {light}, Temp Threshold: {temperature_threshold}, Hum Threshold: {humidity_threshold}, Light Threshold: {light_threshold}"  # For general Message
+
+                    if(message_type >= 5 or counterDebugBorrar==10):
+                        sendAlarm(message_type)
+
+                    # print(last_message)
                 
-
-                    """ if message_type == 1:
-                        socketio.emit('show_hidden_text')
-                    elif message_type == 2:
-                        socketio.emit('hide_hidden_text') """
-
             except struct.error as e:
                 print(f"Struct unpack error: {e}")
                 print(f"Received data: {data.hex()}") # Print the raw bytes to debug.
@@ -151,6 +136,18 @@ def tcp_server():
     conn.close()
     server_socket.close()
     print("TCP Server closed.")
+
+
+def sendAlarm(message_type):
+    """Sets the alarm message in the session."""
+    if message_type == 5:
+        session['alarm_message'] = "High Temperature Alarm!"
+    elif message_type == 6:
+        session['alarm_message'] = "Low Humidity Alarm!"
+    elif message_type == 7:
+        session['alarm_message'] = "Low Light Alarm!"
+    else:
+        session['alarm_message'] = f"Generic Alarm: Code {message_type}"
 
 @app.route("/", methods=['GET', 'POST'])
 def index():
@@ -181,6 +178,16 @@ def index():
                     print(f"Error sending data: {e}")
             else:
                 print("No connection to send 'Hello' message!")
+        elif 'trigger_alarm' in request.form:
+            # This is just a placeholder, you'll need to implement
+            # the logic to trigger the alarm based on user input.
+            alarm_code = request.form.get('alarm_code')
+            print(f"Alarm triggered manually with code: {alarm_code}")
+            if alarm_code:
+                sendAlarm(int(alarm_code))
+            pass
+
+    alarm_message = session.pop('alarm_message', None)  # Get and clear the alarm
 
     return render_template(
         'index.html',
@@ -189,15 +196,14 @@ def index():
         light=light,
         timestamp=timestamp,
         message=last_message,
-        alarm=alarmMessage
+        alarm_message=alarm_message
     )
-
 
 @app.route("/api/sensors")
 def get_sensors_data():
     """API endpoint to get sensor data as JSON."""
-    global temperature, humidity, light, timestamp, last_message, alarmMessage
-    return jsonify(temperature=temperature, humidity=humidity, light=light, timestamp=timestamp, message=last_message, alarm=alarmMessage)
+    global temperature, humidity, light, timestamp, last_message
+    return jsonify(temperature=temperature, humidity=humidity, light=light, timestamp=timestamp, message=last_message)
 
 
 @app.route("/timer_setup", methods=['GET', 'POST'])
@@ -244,14 +250,6 @@ def threshold_setup():
         light_threshold=light_threshold
     )
 
-
-""" @app.route('/show_hidden_text')
-def show_hidden_text():
-    return jsonify({'show': True})
-
-@app.route('/hide_hidden_text')
-def hide_hidden_text():
-    return jsonify({'hide': True}) """
 
 
 if __name__ == "__main__":
