@@ -103,6 +103,8 @@ float gTempThreshold = DEFAULT_TEMP_THRE;
 float gHumThreshold = DEFAULT_HUM_THRE;
 float gLightThreshold = DEFAULT_LIGHT_THRE;
 
+uint8_t ALARM_MESSAGE_WAS_SENT_FLAG = 0;
+
 // Define the structures
 typedef enum {
     MESSAGE_TYPE_HELLO = 0,
@@ -1406,14 +1408,20 @@ void readSensorValues(){
   if(gTemperature > gTempThreshold)
   {
 	  sendData(5);
+	  ALARM_MESSAGE_WAS_SENT_FLAG = 1;
   }
   else if(gHumidity > gHumThreshold)
   {
 	  sendData(6);
+	  ALARM_MESSAGE_WAS_SENT_FLAG = 1;
   }
-  else if (gLight > gLightThreshold)
+  else if(gLight > gLightThreshold)
   {
 	  sendData(7);
+	  ALARM_MESSAGE_WAS_SENT_FLAG = 1;
+  }else if(ALARM_MESSAGE_WAS_SENT_FLAG == 1){
+	  sendData(1);
+	  ALARM_MESSAGE_WAS_SENT_FLAG = 0;
   }
 
 
