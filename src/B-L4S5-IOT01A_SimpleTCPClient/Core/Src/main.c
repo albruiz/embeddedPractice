@@ -18,7 +18,6 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "wifi.h"
@@ -26,6 +25,7 @@
 #include "stm32l4s5i_iot01_tsensor.h"
 #include "stm32l4s5i_iot01_hsensor.h"
 #include <stdlib.h>
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -35,19 +35,16 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define BUFFER_SIZE_HELLO_MSG 50
-#define BUFFER_SIZE_SENSORS_UPDATE 25 // 1 + 4*6 = 25 bytes
-#define BUFFER_SIZE_TIMER_UPDATE 5 // 1 + 4 = 5
-#define BUFFER_SIZE_THRESHOLD_UPDATE 13 // 1 + 4*3 = 13 bytes
-#define DEFAULT_TEMP  25.0f
-#define DEFAULT_HUM   40.0f
-#define DEFAULT_LIGHT 40.0f
-#define DEFAULT_TEMP_THRE  30.0f
-#define DEFAULT_HUM_THRE   60.0f
-#define DEFAULT_LIGHT_THRE 40.0f
-//#define LAST_TEMP  20.0f
-//#define LAST_HUM   40.0f
-//#define LAST_LIGHT 100.0f
+#define BUFFER_SIZE_HELLO_MSG         50
+#define BUFFER_SIZE_SENSORS_UPDATE    25    // 1 + 4*6 = 25 bytes
+#define BUFFER_SIZE_TIMER_UPDATE      5     // 1 + 4 = 5
+#define BUFFER_SIZE_THRESHOLD_UPDATE  13    // 1 + 4*3 = 13 bytes
+#define DEFAULT_TEMP                  25.0f
+#define DEFAULT_HUM                   40.0f
+#define DEFAULT_LIGHT                 40.0f
+#define DEFAULT_TEMP_THRE             30.0f
+#define DEFAULT_HUM_THRE              60.0f
+#define DEFAULT_LIGHT_THRE            40.0f
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -96,25 +93,27 @@ int iSendDataLength;
 int iReceivedDataLength;
 
 float gTemperature = DEFAULT_TEMP;  // global temperature variable
-float gHumidity = DEFAULT_HUM;     // global humidity variable
-float gLight = DEFAULT_LIGHT;      // global light level variable
+float gHumidity = DEFAULT_HUM;      // global humidity variable
+float gLight = DEFAULT_LIGHT;       // global light level variable
 
-float gTempThreshold = DEFAULT_TEMP_THRE;
-float gHumThreshold = DEFAULT_HUM_THRE;
-float gLightThreshold = DEFAULT_LIGHT_THRE;
+float gTempThreshold = DEFAULT_TEMP_THRE;   // global temperature variable
+float gHumThreshold = DEFAULT_HUM_THRE;     // global humidity threshold variable
+float gLightThreshold = DEFAULT_LIGHT_THRE; // global light level threshold variable
 
-uint8_t ALARM_MESSAGE_WAS_SENT_FLAG = 0;
+bool gTempAlarm = false;  // global temperature alarm flag
+bool gHumAlarm = false;   // global humidity alarm flag
+bool gLightAlarm = false; // global light level alarm
 
-// Define the structures
+// Structures declarations
 typedef enum {
     MESSAGE_TYPE_HELLO = 0,
     MESSAGE_TYPE_UPDATE,
     MESSAGE_TYPE_TIMER_UPDATE,
     MESSAGE_TYPE_THRESHOLD_UPDATE,
     MESSAGE_TYPE_SENSORS_REQUEST,
-	MESSAGE_TYPE_THRESHOLD_TEMP,
-	MESSAGE_TYPE_THRESHOLD_HUM,
-	MESSAGE_TYPE_THRESHOLD_LIGHT
+    MESSAGE_TYPE_ALARM,
+//    MESSAGE_TYPE_THRESHOLD_HUM,
+//    MESSAGE_TYPE_THRESHOLD_LIGHT
 } MessageType;
 
 typedef struct {
@@ -154,14 +153,18 @@ typedef struct {
 } mesageSent;
 #pragma pack(pop)
 
-void processReceivedData(uint8_t* data, int dataLength);
+// Wi-Fi related functions declarations
 messageReceived parseMessage(const char *rxData);
-void preSendData();
-void sendData(int type);
 WIFI_Status_t sendMessage(const mesageSent* message);
 //WIFI_Status_t sendThresholds();
 uint8_t* packMessage(const mesageSent* message, uint32_t* packedSize);
+
+// Sensors related functions declarations
+void processReceivedData(uint8_t* data, int dataLength);
+uint16_t readLightLevelValues();
 void readSensorValues();
+void checkThresholds();
+void sendData(int type);
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -199,20 +202,20 @@ int main(void){
   uint16_t port = 48569;
 
   /* Configuracion de Alberto */
-  	char pcRouterSSID[] = "MOVISTAR_D0F0"; // Alberto
-  	char pcRouterPWR[] = "faGAEandMxjdVvMwAqJa"; // Alberto
-  	pu8RemoteIpv4[0] = 192;
-  	pu8RemoteIpv4[1] = 168;
-  	pu8RemoteIpv4[2] = 1;
-  	pu8RemoteIpv4[3] = 35;
+//  char pcRouterSSID[] = "MOVISTAR_D0F0"; // Alberto
+//  char pcRouterPWR[] = "faGAEandMxjdVvMwAqJa"; // Alberto
+//  pu8RemoteIpv4[0] = 192;
+//  pu8RemoteIpv4[1] = 168;
+//  pu8RemoteIpv4[2] = 1;
+//  pu8RemoteIpv4[3] = 35;
 
   /* Configuracion de Carlos */
-	/*char pcRouterSSID[] = "2-1-M11"; // Alberto
-  char pcRouterPWR[] = "Mercader19012768"; // Alberto
+	char pcRouterSSID[] = "2-1-M11"; // Carlos
+  char pcRouterPWR[] = "Mercader19012768"; // Carlos
   pu8RemoteIpv4[0] = 192;
   pu8RemoteIpv4[1] = 168;
   pu8RemoteIpv4[2] = 31;
-  pu8RemoteIpv4[3] = 12;*/
+  pu8RemoteIpv4[3] = 12;
 
   /* USER CODE END 1 */
 
@@ -262,19 +265,19 @@ int main(void){
 	  if(WIFI_GetModuleName(pcWifiModuleName) == WIFI_STATUS_OK){
 		  printf("Wifi Module Name: %s\n\r",pcWifiModuleName);
 	  }else{
-		  printf(">> couldn't get Wifi module name\n\r");
+		  printf("!! couldn't get Wifi module name\n\r");
 	  }
 	  // get module ID
 	  if(WIFI_GetModuleID(pcWifiModuleId) == WIFI_STATUS_OK){
 		  printf("Wifi Module ID: %s\n\r",pcWifiModuleId);
 	  }else{
-		  printf(">> couldn't get Wifi module ID\n\r");
+		  printf("!! couldn't get Wifi module ID\n\r");
 	  }
 	  // get module Firmware revision
 	  if(WIFI_GetModuleFwRevision(pcWifiModuleFwRev) == WIFI_STATUS_OK){
 		  printf("Wifi Module Firmware revision: %s\n\r",pcWifiModuleFwRev);
 	  }else{
-		  printf(">> couldn't get Wifi module Firmware revision\n\r");
+		  printf("!! couldn't get Wifi module Firmware revision\n\r");
 	  }
 	  // get module Mac@
 	  if(WIFI_GetMAC_Address(pu8WifiModuleMacAddress) == WIFI_STATUS_OK){
@@ -283,7 +286,7 @@ int main(void){
 				  pu8WifiModuleMacAddress[2],pu8WifiModuleMacAddress[3],
 				  pu8WifiModuleMacAddress[4],pu8WifiModuleMacAddress[5]);
 	  }else{
-		  printf(">> couldn't get Wifi module MAC address\n\r");
+		  printf("!! couldn't get Wifi module MAC address\n\r");
 	  }
 	  printf("*******************************************************************\n\r");
 
@@ -297,17 +300,18 @@ int main(void){
 		  // Open TCP client
 		  if(WIFI_OpenClientConnection(0, WIFI_TCP_PROTOCOL, "TCP_CLIENT", pu8RemoteIpv4, port , 0) == WIFI_STATUS_OK){
 			  printf("TCP client successfully created. \n\r");
-			  //sendData(1); // send initial data.
-			  preSendData();
+			  sendData(MESSAGE_TYPE_UPDATE); // send initial data.
 		  }else{
-			  printf(">> couldn't create TCP client\n\r");
+			  printf("!! Couldn't create TCP client. Review WiFi settings and re-run. \n\r");
+			  return -1;
 		  }
 	  }else{
-		  printf(">> couldn't connect to router\n\r");
+		  printf("!! Couldn't connect to router. Review WiFi settings and re-run. \n\r");
+		  return -2;
 	  }
   }else{
-	  printf(">> Init WIFI: Failed\n\r");
-	  return;
+	  printf("!! WIFI initilization failed. Review WiFi settings and re-run. \n\r");
+	  return -3;
   }
 
 
@@ -318,21 +322,8 @@ int main(void){
   while (1){
     /* USER CODE END WHILE */
 
-//    gTemperature += 0.5f;
-//    gHumidity += 0.5f;
-//    gLight += 0.5f;
-	//HAL_GPIO_WritePin(GPIOB, LED2_Pin, GPIO_PIN_SET);
-	//HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET);
     readSensorValues();
-
-    if(gLight>20)
-    {
-    	HAL_GPIO_WritePin(GPIOB, LED2_Pin, GPIO_PIN_SET); // Encender el LED
-    }
-    else
-    {
-    	HAL_GPIO_WritePin(GPIOB, LED2_Pin, GPIO_PIN_RESET); // Apagar el LED
-    }
+    checkThresholds();
 
     WIFI_Status_t receive_status = WIFI_ReceiveData(0, pu8RxData, sizeof(pu8RxData), &iReceivedDataLength, 5000);
 	  if(receive_status == WIFI_STATUS_OK){
@@ -342,18 +333,9 @@ int main(void){
 
 			  printf("Received %d bytes of data.\n\r", iReceivedDataLength);
         processReceivedData(pu8RxData, iReceivedDataLength); // Process the received data
-
-//			  printf("received message from server = %s\n\r", pu8RxData);
-
-//			  messageReceived myMessage = parseMessage((const char *)pu8RxData); // Cast to const char *
-
-			  // Now you can use the values in myMessage:
-//			  printf("Parsed: Type = %u, Time = %u, Temp = %.2f, Hum = %.2f, Light = %.2f\n",myMessage.type, myMessage.time, myMessage.temp, myMessage.hum, myMessage.light);
 		  }
 	  }
-    //sendData(1);
-	  //preSendData();
-
+    //sendData(MESSAGE_TYPE_UPDATE);
 
     /* USER CODE BEGIN 3 */
   }
@@ -1111,6 +1093,10 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+/**
+  * @brief  This function process the message received by the TCP server.
+  * @retval None
+  */
 void processReceivedData(uint8_t* data, int dataLength) {
     MessageType messageType = (MessageType)data[0]; // First byte is the message type
 
@@ -1126,7 +1112,7 @@ void processReceivedData(uint8_t* data, int dataLength) {
             break;
         }
         case MESSAGE_TYPE_SENSORS_REQUEST: {
-        	preSendData();
+          sendData(MESSAGE_TYPE_UPDATE);
           printf("Sending data as desired\n\r");
           break;
         }
@@ -1159,7 +1145,7 @@ void processReceivedData(uint8_t* data, int dataLength) {
                 gHumThreshold = thresholdUpdate.humidity_threshold;
                 gLightThreshold = thresholdUpdate.light_threshold;
                 printf("Threshold updated.\n\r");
-                preSendData();
+                sendData(MESSAGE_TYPE_UPDATE);
             }
             break;
         }
@@ -1169,17 +1155,20 @@ void processReceivedData(uint8_t* data, int dataLength) {
     }
 }
 
-// Function to parse the string and initialize the struct
+/**
+  * @brief  This function parses the string and initilize the message structure
+  * @retval None
+  */
 messageReceived parseMessage(const char *rxData) {
     messageReceived message;
     char *token;
     char *str_copy; // Create a copy of the string, strtok modifies it
 
     // Initialize to safe default values in case parsing fails
-    message.type = 0;
-    message.time = 0;
-    message.temp = DEFAULT_TEMP;
-    message.hum = DEFAULT_HUM;
+    message.type  = 0;
+    message.time  = 0;
+    message.temp  = DEFAULT_TEMP;
+    message.hum   = DEFAULT_HUM;
     message.light = DEFAULT_LIGHT;
 
     // Create a copy of the input string since strtok modifies the string
@@ -1253,26 +1242,10 @@ cleanup:
     return message;
 }
 
-void preSendData(){
-
-  if(gTemperature > gTempThreshold)
-  {
-	  sendData(5);
-  }
-  else if(gHumidity > gHumThreshold)
-  {
-	  sendData(6);
-  }
-  else if (gLight > gLightThreshold)
-  {
-	  sendData(7);
-  }else{
-	  sendData(1);
-  }
-
-}
-
-
+/**
+  * @brief  This function creates the message structure and calls sendMessage
+  * @retval None
+  */
 void sendData(int type) {
     mesageSent myMessage;
     myMessage.type = type;
@@ -1292,6 +1265,10 @@ void sendData(int type) {
     }
 }
 
+/**
+  * @brief  This function packs the message
+  * @retval uint8_t*
+  */
 uint8_t* packMessage(const mesageSent* message, uint32_t* packedSize) {
     // Calculate the size of the packed data
     uint32_t size = sizeof(message->type) +
@@ -1348,7 +1325,10 @@ uint8_t* packMessage(const mesageSent* message, uint32_t* packedSize) {
     return packedData;
 }
 
-// Function to send the packed message
+/**
+  * @brief  This function sends the message
+  * @retval WIFI_Status_t
+  */
 WIFI_Status_t sendMessage(const mesageSent* message) {
     uint32_t packedSize;
     uint8_t* packedData = packMessage(message, &packedSize);
@@ -1373,66 +1353,73 @@ WIFI_Status_t sendMessage(const mesageSent* message) {
     return message_status;
 }
 
+/**
+  * @brief  This function reads the values from the Light sensor
+  * @retval uint16_t
+  */
+uint16_t readLightLevelValues(){
+  uint16_t light_value;
+  HAL_ADC_Start(&hadc1);
+    if (HAL_ADC_PollForConversion(&hadc1,100) == HAL_OK)
+    {
+      light_value = HAL_ADC_GetValue(&hadc1);
+      light_value = (light_value / 4095.0) * 100.0; /* adc= 12 bits, normalize and then goes from 0 to 100*/
+      HAL_ADC_Stop(&hadc1);
+    }
+    return light_value;
+}
+
+
+/**
+  * @brief  This function reads the values from the Temperature and Humidity sensor
+  * @retval None
+  */
 void readSensorValues(){
   float temp_value;
   float hum_value;
-  temp_value = BSP_TSENSOR_ReadTemp(); // Read Temperature
+  uint16_t light_value;
+
+  temp_value = BSP_TSENSOR_ReadTemp();    // Read Temperature
   hum_value = BSP_HSENSOR_ReadHumidity(); // Read Humidity
+  light_value = readLightLevelValues();   // Read Light Level
 
-  HAL_ADC_Start(&hadc1);
-  if (HAL_ADC_PollForConversion(&hadc1,100) == HAL_OK)
-  {
-
-  	uint16_t lightADC = HAL_ADC_GetValue(&hadc1);
-  	gLight = (lightADC / 4095.0) * 100.0; /* adc= 12 bits, normalize and then goes from 0 to 100*/
-    HAL_ADC_Stop(&hadc1);
-  }
-
-
-
-  /*if(gLight>20)
-  {
-  	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET); // Encender el LED
-  }
-  else
-  {
-  	HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET); // Apagar el LED
-  }*/
-
-  printf("Read Sensor values: Temp=%.2f, Hum=%.2f & Light=%.2f\n\r",temp_value, hum_value, gLight);
+  printf("Read Sensor values: Temp=%.2f, Hum=%.2f & Light=%d\n\r",temp_value, hum_value, light_value);
 
   gTemperature = temp_value;
   gHumidity = hum_value;
+  gLight = light_value;
+}
 
-  /*If threshold reached, send notification*/
-  if(gTemperature > gTempThreshold)
-  {
-	  sendData(5);
-	  ALARM_MESSAGE_WAS_SENT_FLAG = 1;
-  }
-  else if(gHumidity > gHumThreshold)
-  {
-	  sendData(6);
-	  ALARM_MESSAGE_WAS_SENT_FLAG = 1;
-  }
-  else if(gLight > gLightThreshold)
-  {
-	  sendData(7);
-	  ALARM_MESSAGE_WAS_SENT_FLAG = 1;
-  }else if(ALARM_MESSAGE_WAS_SENT_FLAG == 1){
-	  sendData(1);
-	  ALARM_MESSAGE_WAS_SENT_FLAG = 0;
+/**
+  * @brief  This function checks the thresholds and sends the corresponding mesage
+  * @retval None
+  */
+void checkThresholds(){
+  if(gTemperature > gTempThreshold){
+    sendData(MESSAGE_TYPE_ALARM);
+    gTempAlarm = true;
+  }else if (gTempAlarm == true){
+    sendData(MESSAGE_TYPE_UPDATE);
+    gTempAlarm = false;
   }
 
+  if(gHumidity > gHumThreshold){
+    sendData(MESSAGE_TYPE_ALARM);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_SET); // Encender el LED
+    gHumAlarm = true;
+  }else if (gHumAlarm == true){
+    sendData(MESSAGE_TYPE_UPDATE);
+    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET); // Encender el LED
+    gHumAlarm = false;
+  }
 
-
-//  int tmpInt1 = temp_value;
-//  float tmpFrac = temp_value - tmpInt1;
-//  int tmpInt2 = trunc(tmpFrac * 100);
-//
-//  int humInt1 = (int)hum_value;
-//  float humFrac = hum_value - humInt1;
-//  int humInt2 = trunc(humFrac * 100);
+  if(gLight > gLightThreshold){
+    sendData(MESSAGE_TYPE_ALARM);
+    gLightAlarm = true;
+  }else if(gLightAlarm == true){
+    sendData(MESSAGE_TYPE_UPDATE);
+    gLightAlarm = false;
+  }
 }
 
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
