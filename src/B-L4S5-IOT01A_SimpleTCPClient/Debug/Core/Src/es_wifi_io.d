@@ -1,5 +1,5 @@
 Core/Src/es_wifi_io.o: ../Core/Src/es_wifi_io.c \
- D:/DESKTOP\ D/UC3M-MASTER/EMBEDDED\ SYSTEM/WS2/embeddedPractice/src/B-L4S5-IOT01A_SimpleTCPClient/Drivers/BSP/Components/es_wifi/es_wifi.h \
+ D:/DESKTOP\ D/UC3M-MASTER/EMBEDDED\ SYSTEM/WS2/embeddedPractice_preLioDeCojones/embeddedPractice/src/B-L4S5-IOT01A_SimpleTCPClient/Drivers/BSP/Components/es_wifi/es_wifi.h \
  ../Core/Inc/es_wifi_conf.h ../Core/Inc/es_wifi_io.h \
  ../Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal.h \
  ../Core/Inc/stm32l4xx_hal_conf.h \
@@ -35,9 +35,11 @@ Core/Src/es_wifi_io.o: ../Core/Src/es_wifi_io.c \
  ../Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal_pwr.h \
  ../Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal_pwr_ex.h \
  ../Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal_rng.h \
+ ../Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal_spi.h \
+ ../Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal_spi_ex.h \
  ../Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal_uart.h \
  ../Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal_uart_ex.h
-D:/DESKTOP\ D/UC3M-MASTER/EMBEDDED\ SYSTEM/WS2/embeddedPractice/src/B-L4S5-IOT01A_SimpleTCPClient/Drivers/BSP/Components/es_wifi/es_wifi.h:
+D:/DESKTOP\ D/UC3M-MASTER/EMBEDDED\ SYSTEM/WS2/embeddedPractice_preLioDeCojones/embeddedPractice/src/B-L4S5-IOT01A_SimpleTCPClient/Drivers/BSP/Components/es_wifi/es_wifi.h:
 ../Core/Inc/es_wifi_conf.h:
 ../Core/Inc/es_wifi_io.h:
 ../Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal.h:
@@ -74,5 +76,7 @@ D:/DESKTOP\ D/UC3M-MASTER/EMBEDDED\ SYSTEM/WS2/embeddedPractice/src/B-L4S5-IOT01
 ../Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal_pwr.h:
 ../Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal_pwr_ex.h:
 ../Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal_rng.h:
+../Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal_spi.h:
+../Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal_spi_ex.h:
 ../Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal_uart.h:
 ../Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal_uart_ex.h:
