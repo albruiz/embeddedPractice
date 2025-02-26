@@ -127,7 +127,7 @@ def tcp_server():
                     elif(message_type == 7):
                         alarmMessage = "WARNING! THE LIGHT IS TOO HIGH - CLOSING THE SHUTTERS"
                     else:
-                        alarmMessage = "Every is value is OK"
+                        alarmMessage = "Every value is OK"
 
                     last_message = f"Received at {timestamp}: Type: {message_type}, Temp: {temperature}, Hum: {humidity}, Light: {light}, Temp Threshold: {temperature_threshold}, Hum Threshold: {humidity_threshold}, Light Threshold: {light_threshold}"  # For general Message
                 
