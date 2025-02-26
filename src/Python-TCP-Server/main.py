@@ -15,7 +15,7 @@ BUFFER_SIZE_HELLO_MSG = 50  # 1 + 49 = 50 bytes
 MESSAGE_TYPE_HELLO = 0
 BUFFER_SIZE_SENSORS_UPDATE = 25 # 1 + 4*6 = 25 bytes
 MESSAGE_TYPE_SENSORS_UPDATE = 1
-MESSAGE_TYPE_WARNING_TEMP = 5
+MESSAGE_TYPE_ALARM = 5
 MESSAGE_TYPE_WARNING_HUM = 6
 MESSAGE_TYPE_WARNING_LIGHT = 7
 # BUFFER_SIZE_TIMER_UPDATE 5 # 1 + 4 = 5 bytes
@@ -113,19 +113,24 @@ def tcp_server():
                 # Unpack the received data, assuming network byte order
                 unpacked_data = struct.unpack("<Bffffff", data)  # Little-endian order
 
-                if unpacked_data[0] == MESSAGE_TYPE_SENSORS_UPDATE or unpacked_data[0] == 5 or unpacked_data[0] == 6 or unpacked_data[0] == 7:
+                # if unpacked_data[0] == MESSAGE_TYPE_SENSORS_UPDATE or unpacked_data[0] == MESSAGE_TYPE_ALARM or unpacked_data[0] == 6 or unpacked_data[0] == 7:
+                if unpacked_data[0] == MESSAGE_TYPE_SENSORS_UPDATE or unpacked_data[0] == MESSAGE_TYPE_ALARM:
                     message_type, temperature_val, humidity_val, light_val, temperature_threshold, humidity_threshold, light_threshold = unpacked_data
                 
                     temperature = str(round(temperature_val, 2))  # Round to 2 decimal places
                     humidity = str(round(humidity_val, 2))        # Round to 2 decimal places
                     light = str(round(light_val, 2))          # Round to 2 decimal places
+
+                    # temperature_html = f'<span style="color: {"red" if temperature_val > temperature_threshold else "black"}">{round(temperature_val, 2)}</span>'
+                    # humidity_html = f'<span style="color: {"red" if humidity_val > humidity_threshold else "black"}">{round(humidity_val, 2)}</span>'
+                    # light_html = f'<span style="color: {"red" if light_val > light_threshold else "black"}">{round(light_val, 2)}</span>'
                     
-                    if(message_type == 5):
-                        alarmMessage = "WARNING! THE TEMPERATURE IS TOO HIGH"
-                    elif(message_type == 6):
-                        alarmMessage = "WARNING! THE HUMIDITY IS TOO HIGH"
-                    elif(message_type == 7):
-                        alarmMessage = "WARNING! THE LIGHT IS TOO HIGH - CLOSING THE SHUTTERS"
+                    if(message_type == MESSAGE_TYPE_ALARM):
+                        alarmMessage = "WARNING! CHECK YOUR PLANT"
+                    # elif(message_type == 6):
+                    #     alarmMessage = "WARNING! THE HUMIDITY IS TOO HIGH"
+                    # elif(message_type == 7):
+                    #     alarmMessage = "WARNING! THE LIGHT IS TOO HIGH - CLOSING THE SHUTTERS"
                     else:
                         alarmMessage = "Every value is OK"
 
@@ -196,8 +201,19 @@ def index():
 @app.route("/api/sensors")
 def get_sensors_data():
     """API endpoint to get sensor data as JSON."""
-    global temperature, humidity, light, timestamp, last_message, alarmMessage
-    return jsonify(temperature=temperature, humidity=humidity, light=light, timestamp=timestamp, message=last_message, alarm=alarmMessage)
+    global temperature, temperature_threshold, humidity, humidity_threshold, light, light_threshold, timestamp, last_message, alarmMessage
+
+    temperature_html = ""
+    humidity_html = ""
+    light_html = ""
+
+    try:
+        temperature_html = f'<span style="color: {"red" if float(temperature) > temperature_threshold else "black"}">{temperature} °C</span>'
+        humidity_html = f'<span style="color: {"red" if float(humidity) > humidity_threshold else "black"}">{humidity} %</span>'
+        light_html = f'<span style="color: {"red" if float(light) > light_threshold else "black"}">{light} %</span> <b>{" >>> CLOSING THE SHUTTERS" if float(light) > light_threshold else ""}</b>'
+    except TypeError as e:
+        pass
+    return jsonify(temperature=temperature, temperature_html=temperature_html, humidity=humidity, humidity_html=humidity_html, light=light, light_html=light_html, timestamp=timestamp, message=last_message, alarm=alarmMessage)
 
 
 @app.route("/timer_setup", methods=['GET', 'POST'])

@@ -7,9 +7,9 @@
             fetch('/api/sensors')
                 .then(response => response.json())
                 .then(data => {
-                    document.getElementById('temperature-display').innerText = data.temperature;
-                    document.getElementById('humidity-display').innerText = data.humidity;
-                    document.getElementById('light-display').innerText = data.light;
+                    document.getElementById('temperature-display').innerHTML  = data.temperature_html;
+                    document.getElementById('humidity-display').innerHTML  = data.humidity_html;
+                    document.getElementById('light-display').innerHTML  = data.light_html;
                     document.getElementById('timestamp-display').innerText = data.timestamp;
                     document.getElementById('message-display').innerText = data.message;
                     if (data.alarm !== undefined) {
@@ -80,9 +80,9 @@
 <body>
     <h1>Flower smart pot</h1>
 
-    <p><b>Temperature:</b> <span id="temperature-display">{{ temperature }}</span> °C</p>
-    <p><b>Humidity:</b> <span id="humidity-display">{{ humidity }}</span> %</p>
-    <p><b>Light:</b> <span id="light-display">{{ light }}</span> lux</p>
+    <p><b>Temperature:</b> <span id="temperature-display">{{ temperature }}</span></p>
+    <p><b>Humidity:</b> <span id="humidity-display">{{ humidity }}</span></p>
+    <p><b>Light:</b> <span id="light-display">{{ light }}</span></p>
     <p><b>Timestamp:</b> <span id="timestamp-display">{{ timestamp }}</span> </p>
     <p><b>Alarm:</b> <span id="alarm-display">There is no alarm message</span> </p>
     <!-- <p><b>Alarm:</b> <span id="alarm-display">{{ alarmMessage }}</span> </p> -->
@@ -100,7 +100,7 @@
 
 
     <div id="last-message-container" style="display: none;">
-        <p><b>Last message</b> <span id="message-display">{{ message }}</span> </p>
+        <p><b>Last message: </b> <span id="message-display">{{ message }}</span> </p>
     </div>
 
     <button onclick="toggleMessage()">Toggle Display of Last Message</button>
